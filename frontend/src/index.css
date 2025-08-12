@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  
+  body {
+    @apply bg-white text-vpbank-gray-800 font-sans antialiased;
+    line-height: 1.6;
+    margin: 0;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  /* VPBank Button Styles */
+  .btn-primary {
+    @apply bg-vpbank-primary hover:bg-vpbank-secondary text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-vpbank hover:shadow-vpbank-lg;
+  }
+  
+  .btn-secondary {
+    @apply bg-white hover:bg-vpbank-gray-50 text-vpbank-primary border-2 border-vpbank-primary font-semibold py-3 px-6 rounded-lg transition-all duration-200;
+  }
+  
+  .btn-outline {
+    @apply bg-transparent hover:bg-vpbank-primary text-vpbank-primary hover:text-white border-2 border-vpbank-primary font-semibold py-3 px-6 rounded-lg transition-all duration-200;
+  }
+  
+  .btn-outline-light {
+    @apply bg-transparent hover:bg-white text-white hover:text-vpbank-primary border-2 border-white font-semibold py-3 px-6 rounded-lg transition-all duration-200;
+  }
+  
+  /* Card Styles */
+  .card {
+    @apply bg-white rounded-xl shadow-soft hover:shadow-medium transition-all duration-300 border border-vpbank-gray-100;
+  }
+  
+  .card-featured {
+    @apply bg-white rounded-xl shadow-vpbank-lg hover:shadow-hard transition-all duration-300 border border-vpbank-primary/20;
+  }
+  
+  /* Input Styles */
+  .input-field {
+    @apply w-full px-4 py-3 border border-vpbank-gray-300 rounded-lg focus:ring-2 focus:ring-vpbank-primary focus:border-vpbank-primary transition-all duration-200;
+  }
+  
+  /* Price Display */
+  .price-display {
+    @apply text-2xl font-bold text-vpbank-green;
+  }
+  
+  .price-display-large {
+    @apply text-3xl font-bold text-vpbank-green;
+  }
+  
+  /* Section Headers */
+  .section-title {
+    @apply text-3xl font-bold text-vpbank-primary mb-2;
+  }
+  
+  .section-subtitle {
+    @apply text-vpbank-gray-600 text-lg mb-8;
+  }
+  
+  /* Navigation */
+  .nav-link {
+    @apply text-vpbank-gray-700 hover:text-vpbank-primary font-medium transition-colors duration-200;
+  }
+  
+  .nav-link-active {
+    @apply text-vpbank-primary font-semibold;
+  }
+  
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+  }
+  
+  .badge-primary {
+    @apply bg-vpbank-primary text-white;
+  }
+  
+  .badge-success {
+    @apply bg-vpbank-green text-white;
+  }
+  
+  .badge-secondary {
+    @apply bg-vpbank-gray-100 text-vpbank-gray-700;
+  }
+  
+  /* Loading States */
+  .skeleton {
+    @apply animate-pulse bg-vpbank-gray-200 rounded;
+  }
+  
+  /* Responsive Text */
+  .responsive-text {
+    @apply text-sm sm:text-base lg:text-lg;
+  }
+  
+  /* Focus States */
+  .focus-visible {
+    @apply focus:outline-none focus:ring-2 focus:ring-vpbank-primary focus:ring-offset-2;
+  }
+}
+
+@layer utilities {
+  /* Custom utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* VPBank specific utilities */
+  .bg-gradient-vpbank {
+    background: linear-gradient(135deg, #1D6161 0%, #1D5961 100%);
+  }
+  
+  .bg-gradient-vpbank-green {
+    background: linear-gradient(135deg, #16BD5E 0%, #14A855 100%);
+  }
+  
+  .bg-gradient-vpbank-prosperity {
+    background: linear-gradient(135deg, #1D6161 0%, #16BD5E 100%);
+  }
+  
+  .bg-gradient-vpbank-warm {
+    background: linear-gradient(135deg, #735950 0%, #92834F 100%);
+  }
+  
+  .text-gradient-vpbank {
+    background: linear-gradient(135deg, #1D6161 0%, #16BD5E 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}

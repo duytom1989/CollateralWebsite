@@ -12,7 +12,7 @@ Develop a collateral liquidation website for VPBank to showcase and manage asset
 
 ## Technical Architecture
 - **Framework**: React.js (frontend) + Node.js/Express (backend)
-- **Database**: PostgreSQL or MySQL
+- **Database**: PostgreSQL
 - **Hosting**: Cloud platform (AWS/Azure) with VPBank domain
 - **CDN**: For image optimization and delivery
 - **Security**: HTTPS, data encryption, secure user authentication
