@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document outlines the technical architecture for VPBank's Collateral Liquidation Website, a platform designed to showcase and manage liquidated assets (real estate and vehicles) from the bank's asset management system (Web QLTS). The system enables customers to browse available collateral assets and express purchase interest while providing administrators with tools to manage customer inquiries.
+This document outlines the technical architecture for VPBank's Collateral Liquidation Website, a platform designed to showcase and manage liquidated assets (real estate and vehicles) from the bank's asset management system (Web QLTS). The system enables customers to browse available collateral assets and express purchase interest.
 
 ## System Overview
 
@@ -12,54 +12,52 @@ VPBank requires a public-facing website to facilitate the liquidation of collate
 - 1000+ vehicle listings
 - Customer inquiry management
 - Integration with existing Web QLTS system
-- Analytics and reporting capabilities
 
 ### Key Stakeholders
 - **End Customers**: Browse and inquire about available assets
-- **VPBank Administrators**: Manage inquiries and monitor analytics
 - **Web QLTS System**: Source system for asset data
 - **Regional Sales Teams**: Process customer inquiries by region
 
 ## High-Level Architecture
 
 ```
+AWS Cloud Infrastructure
 ┌─────────────────────────────────────────────────────────────┐
 │                        Internet                              │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
                     ┌──────────────────┐
-                    │   CloudFlare CDN  │
-                    │   (Static Assets) │
+                    │   CloudFront CDN  │
+                    │   (S3 + ALB)     │
                     └──────────────────┘
                               │
                               ▼
                     ┌──────────────────┐
-                    │     Nginx        │
-                    │   (Docker)       │
+                    │   ALB (Application│
+                    │   Load Balancer)  │
                     └──────────────────┘
                               │
                 ┌─────────────┴─────────────┐
                 ▼                           ▼
         ┌──────────────┐           ┌──────────────┐
         │  React App   │           │  API Server  │
-        │  (Docker)    │           │  (Node.js)   │
-        │              │           │  (Docker)    │
-        └──────────────┘           └──────────────┘
+        │  ECS Fargate │           │  (Node.js)   │
+        │  (2-4 tasks) │           │  ECS Fargate │
+        └──────────────┘           │  (2-4 tasks) │
+                                   └──────────────┘
                                             │
                               ┌─────────────┴──────────┐
                               ▼                        ▼
                     ┌──────────────┐         ┌──────────────┐
-                    │  PostgreSQL  │         │  Redis Cache │
-                    │  (Docker)    │         │  (Docker)    │
+                    │  RDS PostgreSQL│        │   S3 Bucket  │
+                    │  (Multi-AZ)    │        │  (Images)    │
                     └──────────────┘         └──────────────┘
                     
         ┌──────────────────────────┐
         │   External Systems        │
         ├──────────────────────────┤
-        │  • Web QLTS (Data Sync)  │
-        │  • Google Analytics      │
-        │  • Email Service (SMTP)  │
+        │  • Web QLTS (Push API)   │
         └──────────────────────────┘
 ```
 
@@ -112,7 +110,6 @@ frontend/
 - **Runtime**: Node.js 20.x LTS
 - **Framework**: Express.js
 - **API Documentation**: OpenAPI/Swagger
-- **Authentication**: JWT with refresh tokens
 - **Validation**: Joi
 - **ORM**: Prisma
 - **Logging**: Winston
@@ -139,16 +136,11 @@ backend/
 │   │   ├── vehicles.ts
 │   │   ├── realEstate.ts
 │   │   ├── inquiries.ts
-│   │   ├── auth.ts
-│   │   ├── admin.ts
-│   │   ├── sync.ts
-│   │   └── analytics.ts
+│   │   └── sync.ts
 │   ├── middleware/
 │   │   ├── validation.ts
 │   │   ├── errorHandler.ts
-│   │   ├── rateLimiter.ts
 │   │   ├── requestLogger.ts
-│   │   └── analytics.ts
 │   └── index.ts
 ```
 
@@ -162,13 +154,9 @@ GET    /api/v1/assets/:id             # Get asset details
 POST   /api/v1/inquiries              # Submit customer inquiry
 GET    /api/v1/filters/options        # Get filter options
 
-Admin Endpoints:
-POST   /api/v1/auth/login             # Admin login
-POST   /api/v1/auth/refresh           # Refresh token
-GET    /api/v1/admin/inquiries        # List inquiries
-GET    /api/v1/admin/inquiries/export # Export inquiries
-GET    /api/v1/admin/analytics        # Analytics dashboard data
-POST   /api/v1/admin/sync             # Trigger manual sync
+Management Endpoints:
+GET    /api/v1/inquiries/export       # Export inquiries
+POST   /api/v1/sync                   # Trigger manual sync
 ```
 
 ### 3. Database Layer
@@ -236,66 +224,46 @@ CREATE TABLE inquiries (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Admin users
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'admin',
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 ```
 
-#### Redis Cache Strategy
-- **Asset listings**: 5-minute TTL
-- **Filter options**: 1-hour TTL
-- **Asset details**: 10-minute TTL
-- **Session storage**: 24-hour TTL
+#### Application-Level Cache Strategy
+- **In-memory caching** for frequently accessed data
+- **Asset listings**: 5-minute cache
+- **Filter options**: 1-hour cache
+- **Asset details**: 10-minute cache
 
 ### 4. Integration Layer
 
 #### Web QLTS Synchronization
 
 ```
-Sync Architecture:
+Push-Based Sync Architecture:
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│   Web QLTS   │────▶│  Sync Queue  │────▶│   Database   │
-│    System    │     │   (Redis)    │     │  (PostgreSQL)│
+│   Web QLTS   │────▶│  Collateral  │────▶│   Database   │
+│    System    │     │   API        │     │  (PostgreSQL)│
 └──────────────┘     └──────────────┘     └──────────────┘
         │                    │                     │
-        │                    ▼                     │
-        │            ┌──────────────┐             │
-        └───────────▶│  Sync Worker  │◀────────────┘
-                     │   (Cron Job)  │
-                     └──────────────┘
+        ▼                    ▼                     │
+   [POST Request]      [Validation]               │
+   /api/assets/sync    & Processing               │
+                            │                      │
+                            └──────────────────────┘
 ```
 
-**Sync Process**:
-1. Scheduled job runs every 30 minutes
-2. Fetches assets with "In Processing" status from Web QLTS
-3. Compares with local database
-4. Updates changed assets, adds new ones
-5. Removes assets no longer in "Processing" status
-6. Logs sync operations for audit
+**Push-Based Sync Process**:
+1. Web QLTS calls Collateral API endpoint when asset status changes
+2. API validates incoming data
+3. Creates/updates/deletes assets in PostgreSQL
+4. Returns success/failure response to Web QLTS
+5. Logs all sync operations for audit
+6. Real-time updates without polling delay
 
-#### Google Analytics Integration
-- **Implementation**: Google Analytics 4 (GA4)
-- **Events Tracked**:
-  - Page views
-  - Asset detail views
-  - Filter usage
-  - Inquiry submissions
-  - Contact information clicks
-- **Enhanced E-commerce**: Track asset interest funnel
 
 ## Security Architecture
 
-### Authentication & Authorization
-- **Admin Authentication**: JWT with refresh token rotation
-- **Session Management**: Redis-backed sessions
-- **Role-Based Access Control (RBAC)**: Admin-only features
-- **API Rate Limiting**: 100 requests per minute per IP
+### API Security
+- **API Rate Limiting**: 100 requests per minute per IP (via AWS WAF)
+- **API Key Authentication**: For Web QLTS sync endpoints
 
 ### Data Protection
 - **Encryption at Rest**: Database encryption
@@ -335,23 +303,24 @@ Strict-Transport-Security
 ### Caching Strategy
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Browser   │────▶│     CDN     │────▶│    Redis    │
-│    Cache    │     │    Cache    │     │    Cache    │
+│   Browser   │────▶│  CloudFront │────▶│ Application │
+│    Cache    │     │     CDN     │     │   Memory    │
 └─────────────┘     └─────────────┘     └─────────────┘
                                                 │
                                          ┌─────────────┐
-                                         │  Database   │
+                                         │  RDS        │
+                                         │  PostgreSQL │
                                          └─────────────┘
 ```
 
 ## Deployment Architecture
 
 ### Infrastructure
-- **Cloud Provider**: AWS/Azure (VPBank preference)
-- **Container Orchestration**: Docker + Kubernetes
-- **CI/CD**: GitLab CI/Jenkins
-- **Monitoring**: Prometheus + Grafana
-- **Log Aggregation**: ELK Stack
+- **Cloud Provider**: AWS
+- **Container Orchestration**: ECS Fargate
+- **CI/CD**: AWS CodePipeline/GitLab CI
+- **Monitoring**: CloudWatch + Custom Dashboards
+- **Log Aggregation**: CloudWatch Logs
 
 ### Environment Configuration
 ```
@@ -374,10 +343,10 @@ Environments:
 ## Monitoring & Observability
 
 ### Application Monitoring
-- **APM**: New Relic/Datadog integration
-- **Error Tracking**: Sentry for error aggregation
-- **Uptime Monitoring**: Pingdom/UptimeRobot
-- **Performance Metrics**: Core Web Vitals tracking
+- **APM**: AWS X-Ray for distributed tracing
+- **Error Tracking**: CloudWatch Logs Insights
+- **Uptime Monitoring**: Route 53 Health Checks
+- **Performance Metrics**: CloudWatch Custom Metrics
 
 ### Business Metrics
 - **Dashboard KPIs**:
@@ -395,14 +364,13 @@ Environments:
 - **Warning Alerts**:
   - High response times (>2s)
   - Memory usage >80%
-  - Failed login attempts
 
 ## Disaster Recovery
 
 ### Backup Strategy
-- **Database Backups**: Daily automated backups with 30-day retention
-- **Point-in-Time Recovery**: Transaction log backups every hour
-- **Cross-Region Replication**: Real-time replication to DR site
+- **Database Backups**: RDS automated daily backups with 30-day retention
+- **Point-in-Time Recovery**: RDS continuous backups (up to 5 minutes RPO)
+- **S3 Replication**: Cross-region replication for critical assets
 
 ### RTO/RPO Targets
 - **Recovery Time Objective (RTO)**: 4 hours
@@ -411,17 +379,17 @@ Environments:
 ## Scalability Considerations
 
 ### Scaling Strategy
-For the initial launch, the dockerized architecture supports:
-- **Container-based Deployment**: All services run as separate Docker containers
-- **Service Scaling**: Scale individual services (React app, API server) independently
-- **Database Scaling**: PostgreSQL runs in Docker container, can be upgraded or moved to managed service
-- **CDN Scaling**: CloudFlare handles static asset distribution
-- **Future Horizontal Scaling**: Docker containers can be replicated across multiple instances
+AWS infrastructure with auto-scaling capabilities:
+- **Container-based Deployment**: ECS Fargate with auto-scaling (2-4 tasks per service)
+- **Service Scaling**: Frontend and Backend scale independently based on CPU/memory metrics
+- **Database Scaling**: RDS db.t3.medium with Multi-AZ, upgradeable to db.t3.large
+- **CDN Scaling**: CloudFront automatically scales for global distribution
+- **Storage Scaling**: S3 scales automatically, RDS storage auto-scales up to 100GB
 
 ### Scaling Thresholds
-- **Server**: Scale when CPU >80% for 10 minutes
-- **Database**: Upgrade when storage >80% or connections >80% of max
-- **Cache**: Add Redis when database query response time >500ms
+- **ECS Services**: Scale when CPU >70% for 5 minutes (Frontend), >60% (Backend)
+- **Database**: Upgrade to db.t3.large when CPU >80% or connections >80% of max
+- **Storage**: RDS auto-scales when storage >80% utilized
 
 ## Future Enhancements
 
@@ -447,15 +415,11 @@ For the initial launch, the dockerized architecture supports:
 | Node.js | 20.x LTS | Latest LTS version |
 | React | 18.x | With concurrent features |
 | PostgreSQL | 15.x | Latest stable |
-| Redis | 7.x | With persistence |
 | Docker | 24.x | With BuildKit |
 | Nginx | 1.24.x | As reverse proxy |
 
 ### B. External Dependencies
-- Google Analytics 4
-- CloudFlare CDN
-- SendGrid/AWS SES (Email)
-- VPBank SSO (if required)
+- CloudFront CDN
 - Web QLTS API endpoints
 
 ### C. Compliance Requirements

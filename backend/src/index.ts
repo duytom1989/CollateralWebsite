@@ -11,15 +11,11 @@ import assetRoutes from './routes/assets';
 import vehicleRoutes from './routes/vehicles';
 import realEstateRoutes from './routes/realEstate';
 import inquiryRoutes from './routes/inquiries';
-import authRoutes from './routes/auth';
-import adminRoutes from './routes/admin';
 import syncRoutes from './routes/sync';
-import analyticsRoutes from './routes/analytics';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
-import { rateLimiter } from './middleware/rateLimiter';
 
 // Load environment variables
 dotenv.config();
@@ -65,9 +61,6 @@ app.use(compression());
 app.use(morgan('combined'));
 app.use(requestLogger);
 
-// Rate limiting
-app.use(rateLimiter);
-
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
@@ -83,10 +76,7 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/real-estate', realEstateRoutes);
 app.use('/api/inquiries', inquiryRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
 app.use('/api/sync', syncRoutes);
-app.use('/api/analytics', analyticsRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
